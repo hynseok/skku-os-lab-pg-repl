@@ -6,6 +6,11 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+#include "vm.h"
+#include "kalloc.h"
+
+const int BLKS_PER_PAGE = 8;
+const int BITS_PER_BYTE = 8;
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -32,7 +37,7 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *
+pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
   pde_t *pde;
@@ -244,6 +249,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       kfree(mem);
       return 0;
     }
+    lru_list_add(V2P(mem), pgdir, (char*)a);
   }
   return newsz;
 }
@@ -271,7 +277,13 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       if(pa == 0)
         panic("kfree");
       char *v = P2V(pa);
+      lru_list_delete(pa);
       kfree(v);
+      *pte = 0;
+    }
+    else if((*pte & PTE_P) == 0 && (*pte & PTE_U) != 0){
+      int blkno = *pte >> 12;
+      stable_free_blk(blkno);
       *pte = 0;
     }
   }
@@ -308,6 +320,7 @@ clearpteu(pde_t *pgdir, char *uva)
   if(pte == 0)
     panic("clearpteu");
   *pte &= ~PTE_U;
+  lru_list_delete(PTE_ADDR(*pte));
 }
 
 // Given a parent process's page table, create a copy
@@ -325,8 +338,11 @@ copyuvm(pde_t *pgdir, uint sz)
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
-    if(!(*pte & PTE_P))
-      panic("copyuvm: page not present");
+    if(!(*pte & PTE_P)) {
+      pte_t *d_pte = walkpgdir(d, (void *)i, 1);
+      *d_pte = *pte;
+      continue;
+    }
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -385,6 +401,112 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
+/* pa4 */
+// swap table (bitmap)
+
+struct swap_table stable;
+
+void 
+stable_init() {
+  stable.bitmap = kalloc();
+  memset((void*)stable.bitmap, 0, PGSIZE);
+  stable.nfree = SWAPMAX / BLKS_PER_PAGE;
+  initlock(&stable.lock, "stable");
+}
+
+int 
+stable_set_blk(int blkno) {
+  int byte_idx = blkno / BITS_PER_BYTE;
+  int bit_idx = blkno % BITS_PER_BYTE;
+  acquire(&stable.lock);
+  if (!(stable.bitmap[byte_idx] & (1 << bit_idx))) {
+    stable.bitmap[byte_idx] |= (1 << bit_idx);
+    stable.nfree--;
+  } else {
+    release(&stable.lock);
+    return -1;
+  }
+  release(&stable.lock);
+  return 0;
+}
+
+void 
+stable_free_blk(int blkno) {
+  int byte_idx = blkno / BITS_PER_BYTE;
+  int bit_idx = blkno % BITS_PER_BYTE;
+
+  acquire(&stable.lock);
+  stable.bitmap[byte_idx] &= ~(1 << bit_idx);
+  stable.nfree++;
+  release(&stable.lock);
+}
+
+int 
+stable_is_used(int blkno) {
+  int byte_idx = blkno / BITS_PER_BYTE;
+  int bit_idx = blkno % BITS_PER_BYTE;
+
+  int ret = 0;
+  acquire(&stable.lock);
+  if(stable.bitmap[byte_idx] & (1 << bit_idx))
+    ret = 1;
+  release(&stable.lock);
+
+  return ret;
+}
+
+int
+stable_get_freeblk() {
+  acquire(&stable.lock);
+  if(stable.nfree == 0) {
+    release(&stable.lock);
+    return -1;
+  }
+  for (int i = 0; i < ((SWAPMAX / BLKS_PER_PAGE) / BITS_PER_BYTE); i++) {
+    if (stable.bitmap[i] != 0xFF) {
+      for (int j = 0; j < BITS_PER_BYTE; j++) {
+        if (!(stable.bitmap[i] & (1 << j))) {
+          stable.bitmap[i] |= (1 << j);
+          stable.nfree--;
+          release(&stable.lock);
+          return i + j;
+        }
+      }
+    }
+  }
+  release(&stable.lock);
+  return -1;
+}
+
+/* pa4 */
+// swap-in
+int
+page_fault_handler(uint addr)
+{
+  struct proc *p = myproc();
+  pde_t *pgdir = p->pgdir;
+  pte_t *pte;
+  char *mem;
+
+  if((pte = walkpgdir(pgdir, (void *)PGROUNDDOWN(addr), 0)) == 0)
+    return -1;
+  
+  int blkno = *pte >> 12;
+
+  if(blkno < 0 || blkno >= SWAPMAX / BLKS_PER_PAGE)
+    return -1;
+
+  if((mem = kalloc()) == 0)
+    return -1;
+  swapread(mem, blkno);
+
+  lru_list_add(V2P(mem), pgdir, (char *)PGROUNDDOWN(addr));
+  stable_free_blk(blkno);
+
+  *pte &= PTE_FLAGS(*pte);
+  *pte |= V2P(mem) | PTE_P ;
+  return 0;
+}
 //PAGEBREAK!
 // Blank page.
 //PAGEBREAK!
