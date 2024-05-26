@@ -104,7 +104,7 @@ reclaim() {
       continue;
     }
     pte = walkpgdir(victim->pgdir, victim->vaddr, 0);
-    if(P2V(PTE_ADDR(*pte)) < end) { // avoid kfree panic
+    if((char*)P2V(PTE_ADDR(*pte)) < end) { // avoid kfree panic
       page_lru_head = victim;
       continue;
     }
