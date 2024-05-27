@@ -44,7 +44,7 @@ main(void)
 {
   int a, b; //a swapread, b swapwrite
   int c; //c lrustat
-  int i, pid;
+  int pid;
   pid = fork();
   if(pid==0){
       forkfn();
