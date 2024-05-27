@@ -106,6 +106,7 @@ extern int sys_uptime(void);
 extern int sys_swapread(void);
 extern int sys_swapwrite(void);
 extern int sys_swapstat(void);
+extern int sys_lrustat(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -132,6 +133,7 @@ static int (*syscalls[])(void) = {
 [SYS_swapread]	sys_swapread,
 [SYS_swapwrite] sys_swapwrite,
 [SYS_swapstat] sys_swapstat,
+[SYS_lrustat] sys_lrustat,
 };
 
 void

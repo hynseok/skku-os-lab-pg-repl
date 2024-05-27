@@ -339,8 +339,26 @@ copyuvm(pde_t *pgdir, uint sz)
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P)) {
-      pte_t *d_pte = walkpgdir(d, (void *)i, 1);
-      *d_pte = *pte;
+      int blkno = *pte >> 12;
+      if(blkno < 0 || blkno > SWAPMAX / BITS_PER_BYTE) 
+        goto bad;
+      int new_blkno = stable_get_freeblk();
+      if(new_blkno < 0)
+        goto bad;
+      if((mem = kalloc()) == 0) {
+        stable_free_blk(new_blkno);
+        goto bad;
+      }
+      swapread(mem, blkno);
+      if(mappages(d, (void*)i, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0) {
+        stable_free_blk(new_blkno);
+        kfree(mem);
+        goto bad;
+      }
+      lru_list_add(V2P(mem), d, (char*)i);
+      swapwrite(mem, new_blkno);
+      pte_t *new_pte = walkpgdir(d, (void *)i, 0);
+      *new_pte = (new_blkno << 12) | PTE_FLAGS(*pte);
       continue;
     }
     pa = PTE_ADDR(*pte);

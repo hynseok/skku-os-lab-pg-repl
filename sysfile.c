@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "kalloc.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -479,4 +480,15 @@ int sys_swapstat(void)
 	*nr_read = nr_sectors_read;
 	*nr_write = nr_sectors_write;
 	return 0;
+}
+
+int sys_lrustat(void)
+{
+  int* nr_lru;
+  
+  if(argptr(0, (void*)&nr_lru, sizeof(*nr_lru)) < 0)
+    return -1;
+
+  *nr_lru = num_lru_pages;
+  return 0;
 }

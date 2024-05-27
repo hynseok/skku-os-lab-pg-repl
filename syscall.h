@@ -23,3 +23,4 @@
 #define SYS_swapread	22
 #define SYS_swapwrite	23
 #define SYS_swapstat	24
+#define SYS_lrustat	25

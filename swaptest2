@@ -43,7 +43,6 @@ int
 main(void)
 {
   int a, b; //a swapread, b swapwrite
-  int c; //c lrustat
   int i, pid;
   pid = fork();
   if(pid==0){
@@ -53,10 +52,8 @@ main(void)
       wait();
       printf(1, "swaptest completed\n");
   }
-  lrustat(&c);
   swapstat(&a, &b);
   printf(1, "swapstat: %d %d\n", a, b);
-  printf(1, "lrustat: %d\n", c);
   pid = fork();
   if(pid==0){
       forkfn();
@@ -65,9 +62,7 @@ main(void)
       wait();
       printf(1, "swaptest completed\n");
   }
-  lrustat(&c);
   swapstat(&a, &b);
   printf(1, "swapstat: %d %d\n", a, b);
-  printf(1, "lrustat: %d\n", c);
   exit();
 }

@@ -190,6 +190,12 @@ lru_list_add(uint paddr, pde_t *pgdir, char *vaddr) {
     return -1;
   }
   p = &pages[idx];
+
+  if (p->next != 0 || p->prev != 0) {
+    release(&lru_list_lock);
+    return -1;
+  }
+
   p->pgdir = pgdir;
   p->vaddr = vaddr;
   if(page_lru_head) {
