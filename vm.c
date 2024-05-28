@@ -355,8 +355,8 @@ copyuvm(pde_t *pgdir, uint sz)
         kfree(mem);
         goto bad;
       }
-      lru_list_add(V2P(mem), d, (char*)i);
       swapwrite(mem, new_blkno);
+      kfree(mem);
       pte_t *new_pte = walkpgdir(d, (void *)i, 0);
       *new_pte = (new_blkno << 12) | PTE_FLAGS(*pte);
       continue;

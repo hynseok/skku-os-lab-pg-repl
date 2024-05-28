@@ -9,7 +9,7 @@
 #include "memlayout.h"
 
 #define PGSIZE 4096
-#define NUM_PAGES 20000
+#define NUM_PAGES 10000
 
 void
 touch_pages(char *base, int num_pages)
@@ -25,6 +25,7 @@ forkfn()
 {
   char *base;
   int i;
+  int a, b; //a swapread, b swapwrite
 
   base = sbrk(NUM_PAGES * PGSIZE);
   if (base == (char*)-1) {
@@ -37,37 +38,23 @@ forkfn()
   for (i = 0; i < NUM_PAGES; i++) {
     base[i * PGSIZE] = i;
   }
+  swapstat(&a, &b);
+  printf(1, "swapstat: %d %d\n", a, b);
 }
 
 int
 main(void)
 {
-  int a, b; //a swapread, b swapwrite
-  int c; //c lrustat
-  int pid;
-  pid = fork();
-  if(pid==0){
-      forkfn();
+  int i, pid;
+  for(i=0; i<3; i++) {
+    pid = fork();
+    if(pid==0){
+        forkfn();
+    }
+    else{
+        wait();
+        printf(1, "swaptest completed\n");
+    }
   }
-  else{
-      wait();
-      printf(1, "swaptest completed\n");
-  }
-  lrustat(&c);
-  swapstat(&a, &b);
-  printf(1, "swapstat: %d %d\n", a, b);
-  printf(1, "lrustat: %d\n", c);
-  pid = fork();
-  if(pid==0){
-      forkfn();
-  }
-  else{
-      wait();
-      printf(1, "swaptest completed\n");
-  }
-  lrustat(&c);
-  swapstat(&a, &b);
-  printf(1, "swapstat: %d %d\n", a, b);
-  printf(1, "lrustat: %d\n", c);
   exit();
 }
