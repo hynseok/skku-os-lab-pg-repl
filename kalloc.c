@@ -99,11 +99,12 @@ reclaim() {
   pte_t *pte;
   struct page *victim;
   for(victim = page_lru_head; ; victim = victim->next) {
+    pte = walkpgdir(victim->pgdir, victim->vaddr, 0);
+
     if((uint)victim->vaddr >= 0x0000 && (uint)victim->vaddr <= 0x2000) { // avoid evict init and sh
       page_lru_head = victim;
       continue;
     }
-    pte = walkpgdir(victim->pgdir, victim->vaddr, 0);
     if((char*)P2V(PTE_ADDR(*pte)) < end) { // avoid kfree panic
       page_lru_head = victim;
       continue;
@@ -112,17 +113,21 @@ reclaim() {
       page_lru_head = victim;
       continue;
     }
+
     if(*pte & PTE_A) {
       *pte &= ~PTE_A;
       page_lru_head = victim;
     } 
-    else 
+    else {
+      page_lru_head = victim->next;
       break;
+    }
   }
   release(&lru_list_lock);
   uint pa = PTE_ADDR(*pte);
   if(pa == 0)
     return 0;
+  lru_list_delete(pa);
 
   int blkno = stable_get_freeblk();
 
@@ -130,7 +135,7 @@ reclaim() {
     return 0;
 
   swapwrite(victim->vaddr, blkno);
-  lru_list_delete(pa);
+  
   kfree(P2V(pa));
   
   *pte &= PTE_FLAGS(*pte);
