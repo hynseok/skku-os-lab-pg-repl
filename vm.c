@@ -351,7 +351,7 @@ copyuvm(pde_t *pgdir, uint sz)
         goto bad;
       }
       swapread(mem, blkno);
-      if(mappages(d, (void*)i, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0) {
+      if(mappages(d, (void*)i, PGSIZE, V2P(mem), PTE_FLAGS(*pte)) < 0) {
         stable_free_blk(new_blkno);
         kfree(mem);
         goto bad;
