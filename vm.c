@@ -195,6 +195,7 @@ inituvm(pde_t *pgdir, char *init, uint sz)
   memset(mem, 0, PGSIZE);
   mappages(pgdir, 0, PGSIZE, V2P(mem), PTE_W|PTE_U);
   memmove(mem, init, sz);
+  // lru_list_add(V2P(mem), pgdir, (char*)0);
 }
 
 // Load a program segment into pgdir.  addr must be page-aligned
@@ -350,7 +351,7 @@ copyuvm(pde_t *pgdir, uint sz)
         goto bad;
       }
       swapread(mem, blkno);
-      if(mappages(d, (void*)i, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0) {
+      if(mappages(d, (void*)i, PGSIZE, V2P(mem), PTE_FLAGS(*pte)) < 0) {
         stable_free_blk(new_blkno);
         kfree(mem);
         goto bad;
