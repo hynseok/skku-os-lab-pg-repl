@@ -195,6 +195,7 @@ inituvm(pde_t *pgdir, char *init, uint sz)
   memset(mem, 0, PGSIZE);
   mappages(pgdir, 0, PGSIZE, V2P(mem), PTE_W|PTE_U);
   memmove(mem, init, sz);
+  lru_list_add(V2P(mem), pgdir, (char*)0);
 }
 
 // Load a program segment into pgdir.  addr must be page-aligned
@@ -281,7 +282,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       kfree(v);
       *pte = 0;
     }
-    else if((*pte & PTE_P) == 0 && (*pte & PTE_U) != 0){
+    else if(!(*pte & PTE_P)){
       int blkno = *pte >> 12;
       stable_free_blk(blkno);
       *pte = 0;
@@ -452,7 +453,6 @@ void
 stable_free_blk(int blkno) {
   int byte_idx = blkno / BITS_PER_BYTE;
   int bit_idx = blkno % BITS_PER_BYTE;
-
   acquire(&stable.lock);
   stable.bitmap[byte_idx] &= ~(1 << bit_idx);
   stable.nfree++;
@@ -487,7 +487,7 @@ stable_get_freeblk() {
           stable.bitmap[i] |= (1 << j);
           stable.nfree--;
           release(&stable.lock);
-          return i + j;
+          return i * BITS_PER_BYTE + j;
         }
       }
     }
